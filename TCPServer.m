@@ -8,13 +8,29 @@ classdef TCPServer
     
     methods
         
-        
+        function convertFile(o, file)
+           t = readtable(file)
+           s = size(t)
+           len = s(2)
+           s = s(1)-2
+           t = t{:,:}
+           for i = 0:s
+            fdata(i+1,:) = o.updateData(t(i+1,:),len);
+           end
+           c = clock()
+           writematrix(fdata, "decoded_log_"+c(4) + "_" +c(5) + "_" + ceil(c(6))+".csv")
+        end
+             
         %transforme un entier signé sur 8,16,24 ou 32 bits en un double
         %signé
-        function x = decodeSigned(o,input, len, scal, off)
-            xa = double(input)
+        function x = decodeSigned(o,data, index, len, scal, off)
+            v = int32(0)
+            for i = 0:(len-1)
+                v = bitor(v,bitshift(int32(data(index+i)),8*(len-i-1)))
+            end
+            
             %on verifie que le bit de poid fort est un 1 (indique que la valeur est negative)
-            if bitshift(input, -(len*8-1)) == 1
+            if bitshift(v, -(len*8-1)) == 1
                 %exemple avec input = -11317 (sur 16 bit signés) ou 54219 (sur 16 bits non signés et 32 bits signés) (11010011 11001011)
                 %on crée un entier egal a -1 (11111111 11111111 11111111 11111111)
                 toAdd = int32(-1);
@@ -23,14 +39,20 @@ classdef TCPServer
                 toAdd = toAdd- 2^(len*8) +1
                 % on effectue un OU binaire entre les deux variables
                 % donne : 11111111 11111111 11010011 11001011 (-11317 sur un int)
-                xa = bitor(toAdd,input)
+                v = bitor(toAdd,v)
                 %on transformera ensuite xa en un double
             end
-            x = double(xa)*scal+off
+            x = double(v)*scal+off
         end
         
-        function x = decodeUnsigned(o,input, scal, off)
-            x = double(input)*scal+off
+        
+        function x = decodeUnsigned(o,data, index, len, scal, off)
+            v = 0
+            for i = 0:(len-1)
+                v = bitor(v, bitshift(int32(data(index+i)),8*(len-i-1)))
+            end
+            
+            x = double(v)*scal+off
         end
         
         function x = concat(o,a,b)
@@ -44,19 +66,18 @@ classdef TCPServer
         function result = updateData(obj,data, SIZE)
             result = zeros(SIZE,1);
             result(1) = concat(obj,data(1),data(2))
-            result(2) = decodeSigned(obj,concat(obj,data(3),data(4)),2,0.01,0)
-            result(3) = decodeSigned(obj,concat(obj,data(5),data(6)),2,1,0)
-            result(4) = decodeUnsigned(obj,concat(obj,data(7),data(8)),1,0)
-            result(5) = decodeUnsigned(obj,concat(obj,data(9),data(10)),0.01,0)
-            result(6) = decodeUnsigned(obj,concat(obj,data(11),data(12)),0.01,0)
+            result(2) = decodeSigned(obj,data,3,2,0.01,0)
+            result(3) = decodeSigned(obj,data,5,2,1,0)
+            result(4) = decodeUnsigned(obj,data,7,2,1,0)
+            result(5) = decodeUnsigned(obj,data,9,2,0.01,0)
+            result(6) = decodeUnsigned(obj,data,11,2,0.01,0)
             
             result(7) = concat(obj,data(13),data(14))
-            result(8) = decodeUnsigned(obj,concat(obj,data(15),data(16)),0.01,0)
-            result(9) = decodeSigned(obj,concat(obj,data(17),data(18)),2,1,0)
-            result(10) = decodeSigned(obj,concat(obj,data(19),data(20)),2,0.01,0)
+            result(8) = decodeUnsigned(obj,data,15,2,0.01,0)
+            result(9) = decodeSigned(obj,data,17,2,0.01,0)
+            result(10) = decodeSigned(obj,data,19,2,0.01,0)
             
-            
-            result(11) = decodeSigned(obj,concat(obj,data(21),data(22)),2,0.01,0)
+            result(11) = decodeSigned(obj,data,21,2,0.01,0)
             result(12) = concat(obj,data(23),data(24))
             
             result(13) = decodeBool(obj,data(25),0)
@@ -75,6 +96,22 @@ classdef TCPServer
             result(24) = data(27)
             result(25) = data(28)
             
+            result(26) = decodeSigned(obj,data,29,2,0.01,0)
+            
+            result(27) = decodeSigned(obj,data,31,2,0.01,0)
+
+            result(28) = decodeSigned(obj,data,33,2,0.01,0)
+            
+            result(29) = decodeSigned(obj,data,35,2,0.01,0)
+            
+           %ajouter les nouvelles données ici
+           %si valeur signée : 
+           %result(27) = decodeSigned(obj,obj,data,index_data,taille en octet, facteur, offset)
+           %si valeur non signée : 
+           %result(27) = decodeUnsigned(obj,concat(obj,data, index_data,taille en octet, facteur, offset)
+           %si valeur booléen 
+           %result(27) = decodeBool(obj,data(index_data),position_octet) 
+           %avec position_octet l'index du bit dans l'octet
             
         end
         
